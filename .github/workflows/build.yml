@@ -1,0 +1,33 @@
+name: Sonarr CI/CD
+on: [workflow_dispatch]
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    environment: deploy
+    steps:
+      - name: Checkout repo
+        id: checkout-repo
+        uses: actions/checkout@v2
+
+      - name: Set sonarr environment variable
+        run: echo "LATEST_SONARR_VERSION=$(curl -sL 'https://services.sonarr.tv/v1/update/master/changes?runtime=netcore&os=linux&version=3' | jq -r '.[0].version')" >> "$GITHUB_ENV"  
+       
+      - name: Build Image
+        id: build-image
+        uses: redhat-actions/buildah-build@v2
+        with:
+          image: sonarr
+          tags: latest ${{ env.LATEST_SONARR_VERSION }} ${{ github.sha }}
+          containerfiles: |
+            ./Dockerfile
+
+      - name: Push to quay.io
+        id: push-to-quay
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: sonarr
+          tags: latest ${{ env.LATEST_SONARR_VERSION }} ${{ github.sha }}
+          registry: quay.io/castawayegr
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
