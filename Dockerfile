@@ -4,7 +4,8 @@ ENV APP_DIR=/opt/sonarr
 
 WORKDIR ${APP_DIR}
 
-RUN microdnf install tar gzip libicu -y &&\
+RUN microdnf update -y &&\
+	microdnf install tar gzip libicu -y &&\
         curl https://download.mono-project.com/repo/centos8-stable.repo | tee /etc/yum.repos.d/mono-centos8-stable.repo &&\
 	microdnf install -y mono-complete &&\
 	rpm -ivh https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm &&\
