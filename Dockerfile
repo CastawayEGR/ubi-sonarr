@@ -25,4 +25,4 @@ VOLUME /config
 
 EXPOSE 8989
 
-ENTRYPOINT ["mono", "--debug", "./Sonarr", "-nobrowser", "-data=/config"]
+ENTRYPOINT ["./Sonarr", "-nobrowser", "-data=/config"]
