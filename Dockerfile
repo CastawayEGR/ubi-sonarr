@@ -11,7 +11,7 @@ RUN microdnf update -y &&\
 	rpm -ivh https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm &&\
 	rpm -ivh https://vault.centos.org/centos/8/PowerTools/x86_64/os/Packages/tinyxml2-6.0.0-3.el8.x86_64.rpm &&\
 	microdnf install -y libmediainfo &&\
-	curl -o sonarr.tar.gz -sL "https://services.sonarr.tv/v1/download/main/latest?version=3&os=linux" &&\
+	curl -o sonarr.tar.gz -sL "https://services.sonarr.tv/v1/download/main/latest?version=4&os=linux" &&\
 	tar xvf sonarr.tar.gz --strip-components=1 && rm sonarr.tar.gz &&\
         mkdir /config &&\
 	chmod +x ./Sonarr.exe &&\
