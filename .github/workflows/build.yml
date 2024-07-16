@@ -11,7 +11,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Set sonarr environment variable
-        run: echo "LATEST_SONARR_VERSION=$(curl -sL 'https://services.sonarr.tv/v1/update/master/changes?runtime=netcore&os=linux&version=3' | jq -r '.[0].version')" >> "$GITHUB_ENV"  
+        run: echo "LATEST_SONARR_VERSION=$(curl -sL 'https://services.sonarr.tv/v1/update/master/changes?runtime=netcore&os=linux&version=4' | jq -r '.[0].version')" >> "$GITHUB_ENV"  
        
       - name: Build Image
         id: build-image
