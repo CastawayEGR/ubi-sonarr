@@ -1,0 +1,138 @@
+# ============================================================================
+# Sonarr - Minimal UBI-Micro Container Image
+# ============================================================================
+# Multi-stage build for Sonarr v4 (native .NET, no Mono required)
+#
+# Features:
+# - Minimal attack surface using UBI-micro runtime
+# - OpenShift compatible (runs as UID 1001, GID 0)
+# - Rootless container support
+# - libmediainfo for media file analysis
+#
+# Build:
+#   SONARR_VERSION=4.0.0.1234 micro-chef build recipe.yaml
+#   # Or let it use latest:
+#   micro-chef build recipe.yaml
+#
+# Run:
+#   podman run -d --name sonarr \
+#     -p 8989:8989 \
+#     -v /path/to/config:/config \
+#     -v /path/to/media:/media \
+#     sonarr:latest
+# ============================================================================
+
+variables:
+  sonarr_version: "${SONARR_VERSION:-latest}"
+
+output_image: "sonarr"
+
+stages:
+  # -------------------------------------------------------------------------
+  # Builder Stage: Download Sonarr and collect libmediainfo
+  # -------------------------------------------------------------------------
+  - name: builder
+    base_image: "registry.access.redhat.com/ubi9/ubi-minimal"
+    packages:
+      - tar
+      - gzip
+      - curl
+    post_install_commands:
+      # Download Sonarr
+      - "mkdir -p /build/sonarr"
+      - |
+        curl -o /tmp/sonarr.tar.gz -sL "https://services.sonarr.tv/v1/download/main/latest?version=4&os=linux"
+      - "tar xzf /tmp/sonarr.tar.gz -C /build/sonarr --strip-components=1"
+      - "rm /tmp/sonarr.tar.gz"
+      # Remove unnecessary files to reduce image size
+      - "rm -rf /build/sonarr/Sonarr.Update"
+
+      # Add EPEL for libmediainfo
+      - "curl -sL https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm -o /tmp/epel.rpm"
+      - "rpm -ivh /tmp/epel.rpm"
+
+      # Install libmediainfo and collect shared libraries
+      - "microdnf install -y libmediainfo libzen"
+      - "mkdir -p /build/libs"
+      # Copy libmediainfo and dependencies
+      - "cp -P /usr/lib64/libmediainfo.so* /build/libs/"
+      - "cp -P /usr/lib64/libzen.so* /build/libs/"
+      - "cp -P /usr/lib64/libtinyxml2.so* /build/libs/ 2>/dev/null || true"
+
+  # -------------------------------------------------------------------------
+  # Runtime Stage: Minimal UBI-micro with Sonarr
+  # -------------------------------------------------------------------------
+  - name: runtime
+    base_image: "registry.access.redhat.com/ubi9/ubi-micro"
+    packages:
+      # .NET runtime for Sonarr v4
+      - dotnet-runtime-8.0
+      # Required libraries
+      - libicu
+      - sqlite-libs
+      - libcurl-minimal
+      # libmediainfo dependencies available in base repos
+      - zlib
+      - libstdc++
+      # For user management
+      - shadow-utils
+
+    pre_install_commands:
+      # Create sonarr user with OpenShift-compatible permissions
+      # UID 1001, GID 0 (root group) for arbitrary UID support
+      - "useradd -r -u 1001 -g 0 -d /opt/sonarr -s /sbin/nologin sonarr"
+      # Create config directory
+      - "mkdir -p /config"
+      - "chown 1001:0 /config"
+      - "chmod 775 /config"
+      # Create app directory
+      - "mkdir -p /opt/sonarr"
+      - "chown 1001:0 /opt/sonarr"
+      - "chmod 775 /opt/sonarr"
+      # Create lib directory for mediainfo
+      - "mkdir -p /usr/local/lib"
+
+    files:
+      # Copy Sonarr application
+      - source: "/build/sonarr"
+        destination: "/opt/sonarr"
+        owner: "1001:0"
+      # Copy libmediainfo and dependencies
+      - source: "/build/libs"
+        destination: "/usr/local/lib"
+        owner: "root:root"
+
+    post_install_commands:
+      # Ensure proper permissions for OpenShift
+      - "chmod -R g=u /opt/sonarr"
+      - "chmod +x /opt/sonarr/Sonarr"
+      # Make libraries accessible
+      - "chmod 755 /usr/local/lib/*.so*"
+      - "ldconfig /usr/local/lib"
+      # Allow arbitrary UID to update passwd (OpenShift requirement)
+      - "chmod g=u /etc/passwd"
+
+    env:
+      # Sonarr configuration
+      SONARR_BRANCH: "main"
+      XDG_CONFIG_HOME: "/config"
+      # .NET settings
+      DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: "false"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+      # Library path for libmediainfo
+      LD_LIBRARY_PATH: "/usr/local/lib"
+
+    working_dir: "/opt/sonarr"
+    user: "1001:0"
+    expose:
+      - 8989
+    volumes:
+      - /config
+    entrypoint: ["./Sonarr", "-nobrowser", "-data=/config"]
+
+labels:
+  org.opencontainers.image.title: "Sonarr"
+  org.opencontainers.image.description: "Sonarr PVR for Usenet and BitTorrent"
+  org.opencontainers.image.source: "https://github.com/Sonarr/Sonarr"
+  io.openshift.tags: "sonarr,pvr,media"
+  io.k8s.description: "Sonarr media management built with micro-chef"
